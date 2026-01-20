@@ -52,23 +52,44 @@ export async function initDB(): Promise<Database> {
   try {
     // Initialize SQL.js with proper WASM file location handling
     if (!SQL) {
-      const sqlModule = await import('sql.js');
-      // Handle both default export and named export scenarios
-      let initSqlJs = sqlModule.default || sqlModule;
+      try {
+        // Try dynamic import first
+        const sqlModule = await import('sql.js');
+        const initSqlJs = sqlModule.default;
 
-      // If it's not a function, try to get the function from the module
-      if (typeof initSqlJs !== 'function') {
-        throw new Error(`Failed to load initSqlJs: received ${typeof initSqlJs}`);
-      }
-
-      // Call initSqlJs with WASM file location configuration
-      SQL = await initSqlJs({
-        locateFile: (filename: string) => {
-          // For Vite builds, sql.js needs to know where the WASM file is
-          // Using CDN as fallback for production
-          return `https://sql.js.org/dist/${filename}`;
+        if (typeof initSqlJs === 'function') {
+          SQL = await initSqlJs({
+            locateFile: (filename: string) => {
+              return `https://sql.js.org/dist/${filename}`;
+            }
+          });
+        } else {
+          throw new Error('initSqlJs is not a function from dynamic import');
         }
-      });
+      } catch (dynamicImportError) {
+        // Fallback: load sql.js from CDN
+        const script = document.createElement('script');
+        script.src = 'https://sql.js.org/dist/sql-wasm.js';
+        script.async = true;
+
+        SQL = await new Promise((resolve, reject) => {
+          script.onload = () => {
+            // @ts-ignore - sql.js is loaded globally
+            if (typeof window.initSqlJs === 'function') {
+              // @ts-ignore
+              window.initSqlJs({
+                locateFile: (filename: string) => {
+                  return `https://sql.js.org/dist/${filename}`;
+                }
+              }).then(resolve).catch(reject);
+            } else {
+              reject(new Error('sql.js CDN failed to load'));
+            }
+          };
+          script.onerror = () => reject(new Error('Failed to load sql.js from CDN'));
+          document.head.appendChild(script);
+        });
+      }
     }
 
     // Try to load existing database from localStorage
