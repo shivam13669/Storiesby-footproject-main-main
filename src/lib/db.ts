@@ -51,8 +51,11 @@ export async function initDB(): Promise<Database> {
   if (dbInstance) return dbInstance;
 
   try {
-    // Initialize SQL.js with proper WASM handling
-    SQL = await initSqlJs();
+    // Initialize SQL.js with dynamic import
+    if (!SQL) {
+      const initSqlJs: InitSqlJs = (await import('sql.js')).default;
+      SQL = await initSqlJs();
+    }
 
     // Try to load existing database from localStorage
     const savedDb = localStorage.getItem(STORAGE_KEY);
