@@ -52,42 +52,50 @@ export async function initDB(): Promise<Database> {
   try {
     // Initialize SQL.js
     if (!SQL) {
-      // Use dynamic import with proper error handling
-      const sqlModule: any = await import('sql.js');
-      let initSqlJs;
+      let initSqlJs: any = null;
 
-      // Try to get the function from the module
-      if (typeof sqlModule.default === 'function') {
-        initSqlJs = sqlModule.default;
-      } else if (typeof sqlModule === 'function') {
-        initSqlJs = sqlModule;
-      } else {
-        console.error('Failed to find initSqlJs function. Module keys:', Object.keys(sqlModule));
-        throw new Error('Could not find initSqlJs function in sql.js module');
-      }
-
-      // Initialize with WASM file location - try multiple CDN sources
-      let initError: Error | null = null;
-
-      // Try CDN 1
+      // Try dynamic import first
       try {
-        SQL = await initSqlJs({
-          locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
-        });
-      } catch (err) {
-        initError = err as Error;
-        console.warn('Failed to initialize sql.js with sql.js.org CDN, trying jsDelivr...');
-
-        // Fallback to jsDelivr CDN
-        try {
-          SQL = await initSqlJs({
-            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}`,
-          });
-        } catch (fallbackErr) {
-          console.error('Both CDN sources failed. Original error:', initError);
-          throw new Error(`Failed to initialize sql.js: ${(fallbackErr as Error).message}`);
+        const sqlModule: any = await import('sql.js');
+        if (typeof sqlModule.default === 'function') {
+          initSqlJs = sqlModule.default;
+        } else if (typeof sqlModule === 'function') {
+          initSqlJs = sqlModule;
         }
+      } catch (importErr) {
+        console.warn('Dynamic import failed, will load from CDN');
       }
+
+      // If dynamic import failed or module is empty, load from CDN
+      if (!initSqlJs) {
+        // Load sql.js from CDN
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/sql-wasm.js';
+        script.async = true;
+
+        initSqlJs = await new Promise<any>((resolve, reject) => {
+          script.onload = () => {
+            // @ts-ignore - sql.js is loaded globally
+            if (typeof window.initSqlJs === 'function') {
+              // @ts-ignore
+              resolve(window.initSqlJs);
+            } else {
+              reject(new Error('sql.js CDN loaded but initSqlJs not found'));
+            }
+          };
+          script.onerror = () => reject(new Error('Failed to load sql.js from CDN'));
+          document.head.appendChild(script);
+        });
+      }
+
+      if (typeof initSqlJs !== 'function') {
+        throw new Error('initSqlJs is not a function');
+      }
+
+      // Initialize with WASM file location
+      SQL = await initSqlJs({
+        locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}`,
+      });
     }
 
     // Try to load existing database from localStorage
