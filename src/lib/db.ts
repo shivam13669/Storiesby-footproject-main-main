@@ -74,20 +74,19 @@ export async function initDB(): Promise<Database> {
         SQL = await initSqlJs({
           locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
         });
-        return dbInstance;
       } catch (err) {
         initError = err as Error;
         console.warn('Failed to initialize sql.js with sql.js.org CDN, trying jsDelivr...');
-      }
 
-      // Fallback to jsDelivr CDN
-      try {
-        SQL = await initSqlJs({
-          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}`,
-        });
-      } catch (err) {
-        console.error('Both CDN sources failed. Original error:', initError);
-        throw new Error(`Failed to initialize sql.js: ${(err as Error).message}`);
+        // Fallback to jsDelivr CDN
+        try {
+          SQL = await initSqlJs({
+            locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}`,
+          });
+        } catch (fallbackErr) {
+          console.error('Both CDN sources failed. Original error:', initError);
+          throw new Error(`Failed to initialize sql.js: ${(fallbackErr as Error).message}`);
+        }
       }
     }
 
