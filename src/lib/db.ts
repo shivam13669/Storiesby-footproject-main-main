@@ -2,7 +2,6 @@
 import bcrypt from 'bcryptjs';
 
 type Database = any;
-type InitSqlJs = any;
 
 export interface User {
   id: number;
