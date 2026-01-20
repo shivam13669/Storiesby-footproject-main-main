@@ -52,8 +52,14 @@ export async function initDB(): Promise<Database> {
   try {
     // Initialize SQL.js with proper WASM file location handling
     if (!SQL) {
-      const initSqlJsModule = await import('sql.js');
-      const initSqlJs = initSqlJsModule.default;
+      const sqlModule = await import('sql.js');
+      // Handle both default export and named export scenarios
+      let initSqlJs = sqlModule.default || sqlModule;
+
+      // If it's not a function, try to get the function from the module
+      if (typeof initSqlJs !== 'function') {
+        throw new Error(`Failed to load initSqlJs: received ${typeof initSqlJs}`);
+      }
 
       // Call initSqlJs with WASM file location configuration
       SQL = await initSqlJs({
