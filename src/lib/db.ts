@@ -50,13 +50,19 @@ export async function initDB(): Promise<Database> {
   if (dbInstance) return dbInstance;
 
   try {
-    // Initialize SQL.js with dynamic import
+    // Initialize SQL.js with proper WASM file location handling
     if (!SQL) {
-      const { default: initSqlJs } = await import('sql.js');
-      if (typeof initSqlJs !== 'function') {
-        throw new Error('initSqlJs is not a function');
-      }
-      SQL = await initSqlJs();
+      const initSqlJsModule = await import('sql.js');
+      const initSqlJs = initSqlJsModule.default;
+
+      // Call initSqlJs with WASM file location configuration
+      SQL = await initSqlJs({
+        locateFile: (filename: string) => {
+          // For Vite builds, sql.js needs to know where the WASM file is
+          // Using CDN as fallback for production
+          return `https://sql.js.org/dist/${filename}`;
+        }
+      });
     }
 
     // Try to load existing database from localStorage
