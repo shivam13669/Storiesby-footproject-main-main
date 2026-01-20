@@ -53,15 +53,17 @@ export async function initDB(): Promise<Database> {
     // Initialize SQL.js
     if (!SQL) {
       // Use dynamic import with proper error handling
-      const sqlModule = await import('sql.js');
+      const sqlModule: any = await import('sql.js');
+      let initSqlJs;
 
-      // The module might export as default or be the function directly
-      const initSqlJs = (sqlModule as any).default || (sqlModule as any);
-
-      // Ensure initSqlJs is actually a function before calling it
-      if (typeof initSqlJs !== 'function') {
-        console.error('sql.js module contents:', sqlModule);
-        throw new Error('initSqlJs import did not return a function. Module structure may have changed.');
+      // Try to get the function from the module
+      if (typeof sqlModule.default === 'function') {
+        initSqlJs = sqlModule.default;
+      } else if (typeof sqlModule === 'function') {
+        initSqlJs = sqlModule;
+      } else {
+        console.error('sql.js module structure:', sqlModule);
+        throw new Error('Could not find initSqlJs function in sql.js module');
       }
 
       // Initialize with WASM file location
