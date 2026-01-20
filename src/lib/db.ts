@@ -1,8 +1,8 @@
 // Database service using SQLite3 (sql.js - works in browser)
-import initSqlJs from 'sql.js';
 import bcrypt from 'bcryptjs';
 
 type Database = any;
+type InitSqlJs = any;
 
 export interface User {
   id: number;
