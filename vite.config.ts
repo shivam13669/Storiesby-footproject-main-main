@@ -19,20 +19,6 @@ export default defineConfig(({ mode }) => ({
   },
   optimizeDeps: {
     exclude: ['sql.js'],
-    esbuildOptions: {
-      supported: {
-        'top-level-await': true
-      }
-    }
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'sql-js': ['sql.js'],
-        }
-      }
-    }
   },
   worker: {
     format: 'es',
