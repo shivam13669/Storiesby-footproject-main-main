@@ -66,10 +66,29 @@ export async function initDB(): Promise<Database> {
         throw new Error('Could not find initSqlJs function in sql.js module');
       }
 
-      // Initialize with WASM file location
-      SQL = await initSqlJs({
-        locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
-      });
+      // Initialize with WASM file location - try multiple CDN sources
+      let initError: Error | null = null;
+
+      // Try CDN 1
+      try {
+        SQL = await initSqlJs({
+          locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
+        });
+        return dbInstance;
+      } catch (err) {
+        initError = err as Error;
+        console.warn('Failed to initialize sql.js with sql.js.org CDN, trying jsDelivr...');
+      }
+
+      // Fallback to jsDelivr CDN
+      try {
+        SQL = await initSqlJs({
+          locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}`,
+        });
+      } catch (err) {
+        console.error('Both CDN sources failed. Original error:', initError);
+        throw new Error(`Failed to initialize sql.js: ${(err as Error).message}`);
+      }
     }
 
     // Try to load existing database from localStorage
