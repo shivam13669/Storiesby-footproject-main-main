@@ -10,6 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Quote, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { LoginModal } from "@/components/LoginModal";
+import { createTestimonial, getVisibleTestimonials, getUserById } from "@/lib/db";
+import { Testimonial } from "@/lib/db";
 
 const getInitials = (fullName: string) => {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
@@ -20,7 +24,8 @@ const getInitials = (fullName: string) => {
   return `${first}${last}`.toUpperCase();
 };
 
-const testimonials = [
+// Static testimonials for initial display (can be replaced by database testimonials)
+const staticTestimonials = [
   {
     name: "Arjun Mehta",
     role: "Photographer",
@@ -205,11 +210,47 @@ const journeyOptions = [
 
 const TestimonialsPage = () => {
   const { toast } = useToast();
+  const { user, isAuthenticated, refreshUser } = useAuth();
   const [rating, setRating] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [testimonials, setTestimonials] = useState<Array<{
+    name: string;
+    role?: string;
+    location?: string;
+    trip: string;
+    quote: string;
+    rating: number;
+    highlight?: string;
+  }>>(staticTestimonials);
 
   const PAGE_SIZE = 6;
   const [page, setPage] = useState(0);
+
+  // Load testimonials from database
+  useEffect(() => {
+    async function loadTestimonials() {
+      try {
+        const dbTestimonials = await getVisibleTestimonials();
+        // Convert database testimonials to display format
+        const displayTestimonials = dbTestimonials.map((t) => ({
+          name: t.userName,
+          role: t.role || "",
+          location: t.location || "",
+          trip: t.tripName,
+          quote: t.quote,
+          rating: t.rating,
+          highlight: t.highlight || "",
+        }));
+        // Combine static and database testimonials
+        setTestimonials([...displayTestimonials, ...staticTestimonials]);
+      } catch (error) {
+        console.error("Failed to load testimonials:", error);
+      }
+    }
+    loadTestimonials();
+  }, []);
+
   const totalPages = Math.ceil(testimonials.length / PAGE_SIZE);
   const currentItems = testimonials.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
@@ -219,23 +260,94 @@ const TestimonialsPage = () => {
     }
   }, [totalPages, page]);
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    // Check if user is logged in
+    if (!isAuthenticated || !user) {
+      setIsLoginModalOpen(true);
+      toast({
+        title: "Login required",
+        description: "Please login to submit a testimonial",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if user is allowed to submit testimonials
+    if (!user.testimonialAllowed) {
+      toast({
+        title: "Testimonial not allowed",
+        description: "You have not done any trip",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const form = event.currentTarget;
     const data = new FormData(form);
     const fullName = String(data.get("name") || "").trim();
+    const email = String(data.get("email") || "").trim();
+    const tripName = String(data.get("journey") || "").trim();
+    const quote = String(data.get("moments") || "").trim();
+    const ratingValue = Number(data.get("rating") || 5);
+
+    if (!fullName || !email || !tripName || !quote) {
+      toast({
+        title: "Please fill all fields",
+        description: "All fields are required",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
-      toast({
-        title: "Story received",
-        description: `${fullName ? fullName + ", " : ""}thank you for trusting us with your journey.`,
+    try {
+      // Create testimonial in database
+      await createTestimonial({
+        userId: user.id,
+        userName: fullName,
+        email: email,
+        tripName: tripName,
+        quote: quote,
+        rating: ratingValue,
+        role: "",
+        location: "",
+        highlight: "",
+        submittedDate: new Date().toISOString(),
+        isVisible: true, // Auto-visible since user is allowed
       });
+
+      // Refresh testimonials list
+      const dbTestimonials = await getVisibleTestimonials();
+      const displayTestimonials = dbTestimonials.map((t) => ({
+        name: t.userName,
+        role: t.role || "",
+        location: t.location || "",
+        trip: t.tripName,
+        quote: t.quote,
+        rating: t.rating,
+        highlight: t.highlight || "",
+      }));
+      setTestimonials([...displayTestimonials, ...staticTestimonials]);
+
+      toast({
+        title: "Testimonial submitted",
+        description: `Thank you for sharing your experience!`,
+      });
+
       form.reset();
       setRating(5);
-    }, 700);
+    } catch (error: any) {
+      toast({
+        title: "Failed to submit testimonial",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -483,6 +595,7 @@ const TestimonialsPage = () => {
         </section>
       </main>
       <Footer />
+      <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} />
     </div>
   );
 };

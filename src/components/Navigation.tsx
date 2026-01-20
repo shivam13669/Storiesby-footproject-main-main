@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { Menu, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Menu, X, ChevronDown, LogOut, LayoutDashboard, HelpCircle, Shield } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "./ui/button";
 import { CurrencyPicker } from "./CurrencyPicker";
 import { LoginModal } from "./LoginModal";
 import { useCurrency } from "@/context/CurrencyContext";
+import { useAuth, getFirstName } from "@/context/AuthContext";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const navItems = [
   { name: "Home", to: "/", type: "route" as const },
@@ -19,6 +27,13 @@ const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const { currency, setCurrency } = useCurrency();
+  const { user, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    setIsOpen(false);
+  };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-lg border-b border-white/10 text-white shadow-lg">
@@ -55,15 +70,58 @@ const Navigation = () => {
             })}
           </div>
 
-          {/* Currency + Login */}
+          {/* Currency + Login/User */}
           <div className="hidden md:flex items-center gap-3">
             <CurrencyPicker value={currency} onChange={setCurrency} />
-            <button
-              onClick={() => setIsLoginModalOpen(true)}
-              className="text-white/90 hover:text-white font-medium transition-colors"
-            >
-              Login
-            </button>
+            {isAuthenticated && user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 text-white/90 hover:text-white font-medium transition-colors">
+                    <span>Hi, {getFirstName(user.fullName)}</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {user.role === 'admin' ? (
+                    // Admin users see only Admin Panel
+                    <>
+                      <DropdownMenuItem onClick={() => { navigate('/admin'); setIsOpen(false); }}>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { navigate('/support'); setIsOpen(false); }}>
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Support & FAQs
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    // Normal users see Dashboard
+                    <>
+                      <DropdownMenuItem onClick={() => { navigate('/dashboard'); setIsOpen(false); }}>
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        Dashboard
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => { navigate('/support'); setIsOpen(false); }}>
+                        <HelpCircle className="mr-2 h-4 w-4" />
+                        Support & FAQs
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="text-red-500">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="text-white/90 hover:text-white font-medium transition-colors"
+              >
+                Login
+              </button>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -112,15 +170,74 @@ const Navigation = () => {
               })}
               <div className="px-3 py-2 flex items-center gap-2">
                 <CurrencyPicker value={currency} onChange={setCurrency} className="flex-1" />
-                <button
-                  onClick={() => {
-                    setIsLoginModalOpen(true);
-                    setIsOpen(false);
-                  }}
-                  className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
-                >
-                  Login
-                </button>
+                {isAuthenticated && user ? (
+                  <div className="flex flex-col gap-2 w-full">
+                    <div className="px-3 py-2 text-white/90 font-medium">
+                      Hi, {getFirstName(user.fullName)}
+                    </div>
+                    {user.role === 'admin' ? (
+                      // Admin users see only Admin Panel
+                      <>
+                        <button
+                          onClick={() => {
+                            navigate('/admin');
+                            setIsOpen(false);
+                          }}
+                          className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
+                        >
+                          Admin Panel
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigate('/support');
+                            setIsOpen(false);
+                          }}
+                          className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
+                        >
+                          Support & FAQs
+                        </button>
+                      </>
+                    ) : (
+                      // Normal users see Dashboard
+                      <>
+                        <button
+                          onClick={() => {
+                            navigate('/dashboard');
+                            setIsOpen(false);
+                          }}
+                          className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
+                        >
+                          Dashboard
+                        </button>
+                        <button
+                          onClick={() => {
+                            navigate('/support');
+                            setIsOpen(false);
+                          }}
+                          className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
+                        >
+                          Support & FAQs
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="flex-none px-4 py-2 rounded-md bg-red-500/20 text-red-300 text-sm font-medium hover:bg-red-500/30 transition-colors"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setIsLoginModalOpen(true);
+                      setIsOpen(false);
+                    }}
+                    className="flex-none px-4 py-2 rounded-md bg-white/10 text-white text-sm font-medium hover:bg-white/20 transition-colors"
+                  >
+                    Login
+                  </button>
+                )}
               </div>
             </div>
           </div>

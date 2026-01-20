@@ -11,6 +11,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { useAuth } from "@/context/AuthContext";
+import { createUser, getUserByEmail } from "@/lib/db";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -98,6 +102,9 @@ const validatePassword = (password: string) => {
 };
 
 export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
+  const { login, user } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -120,6 +127,8 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
   const [forgotPasswordEmailError, setForgotPasswordEmailError] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [signupLoading, setSignupLoading] = useState(false);
 
   const filteredCountries = COUNTRIES.filter(country =>
     country.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
@@ -131,16 +140,56 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const passwordsMatch = signupPassword && confirmPassword && signupPassword === confirmPassword;
   const isPasswordValid = passwordValidation.isValid && passwordsMatch;
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateEmail(email)) {
       setEmailError("Please enter a valid email address (e.g., you@example.com)");
       return;
     }
-    console.log("Login:", { email, password });
+    
+    setLoginLoading(true);
+    try {
+      const result = await login(email, password);
+      if (result.success) {
+        toast({
+          title: "Login successful",
+          description: "Welcome back!",
+        });
+        // Auto-close modal on successful login
+        onClose();
+        // Reset form
+        setEmail("");
+        setPassword("");
+        setEmailError("");
+        
+        // Get user data to check role for redirect
+        const dbUser = await getUserByEmail(email.toLowerCase());
+        
+        // Redirect admin to admin panel, normal users stay on current page
+        if (dbUser?.role === 'admin') {
+          navigate('/admin');
+        }
+      } else {
+        setEmailError(result.message || "Invalid email or password");
+        toast({
+          title: "Login failed",
+          description: result.message || "Invalid email or password",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      setEmailError("An error occurred. Please try again.");
+      toast({
+        title: "Login failed",
+        description: "An error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoginLoading(false);
+    }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateEmail(signupEmail)) {
       setSignupEmailError("Please enter a valid email address (e.g., you@example.com)");
@@ -148,24 +197,79 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     }
     if (!validateInternationalMobile(mobileNumber, selectedCountry.code)) {
       setMobileNumberError("Please enter a valid mobile number for the selected country");
-      alert("Please enter a valid mobile number for the selected country");
+      toast({
+        title: "Invalid mobile number",
+        description: "Please enter a valid mobile number for the selected country",
+        variant: "destructive",
+      });
       return;
     }
     if (!isPasswordValid) {
-      alert("Password does not meet requirements");
+      toast({
+        title: "Password requirements not met",
+        description: "Please ensure your password meets all requirements",
+        variant: "destructive",
+      });
       return;
     }
     if (!agreeTerms) {
-      alert("Please agree to terms and conditions");
+      toast({
+        title: "Terms and conditions",
+        description: "Please agree to terms and conditions",
+        variant: "destructive",
+      });
       return;
     }
-    console.log("Signup:", {
-      fullName,
-      signupEmail,
-      mobileNumber,
-      country: selectedCountry,
-      signupPassword,
-    });
+
+    setSignupLoading(true);
+    try {
+      await createUser({
+        fullName: fullName.trim(),
+        email: signupEmail.trim().toLowerCase(),
+        password: signupPassword, // Will be hashed in createUser
+        mobileNumber,
+        countryCode: selectedCountry.code,
+        role: 'user',
+        signupDate: new Date().toISOString(),
+        testimonialAllowed: false,
+      });
+
+      toast({
+        title: "Account created",
+        description: "Your account has been created successfully. Please login.",
+      });
+
+      // Switch to login tab
+      setActiveTab('login');
+      setEmail(signupEmail);
+      
+      // Reset signup form
+      setSignupEmail("");
+      setSignupPassword("");
+      setConfirmPassword("");
+      setFullName("");
+      setMobileNumber("");
+      setAgreeTerms(false);
+      setSignupEmailError("");
+      setMobileNumberError("");
+    } catch (error: any) {
+      if (error.message === 'Email already registered') {
+        setSignupEmailError("This email is already registered. Please login instead.");
+        toast({
+          title: "Email already registered",
+          description: "This email is already registered. Please login instead.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Signup failed",
+          description: error.message || "An error occurred. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setSignupLoading(false);
+    }
   };
 
   const handleForgotPassword = (e: React.FormEvent) => {
@@ -343,10 +447,11 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                       {/* Login Button */}
                       <button
                         type="submit"
-                        className="w-full mt-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
+                        disabled={loginLoading}
+                        className="w-full mt-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
                       >
-                        Login & Explore
-                        <ArrowRight className="h-5 w-5" />
+                        {loginLoading ? "Logging in..." : "Login & Explore"}
+                        {!loginLoading && <ArrowRight className="h-5 w-5" />}
                       </button>
                     </form>
 
@@ -720,11 +825,11 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
                       {/* Sign Up Button */}
                       <button
                         type="submit"
-                        disabled={!isPasswordValid || !fullName || !signupEmail || !validateEmail(signupEmail) || !mobileNumber || !validateInternationalMobile(mobileNumber, selectedCountry.code) || !agreeTerms}
+                        disabled={signupLoading || !isPasswordValid || !fullName || !signupEmail || !validateEmail(signupEmail) || !mobileNumber || !validateInternationalMobile(mobileNumber, selectedCountry.code) || !agreeTerms}
                         className="w-full mt-3 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 shadow-lg hover:shadow-xl"
                       >
-                        Create Account
-                        <ArrowRight className="h-5 w-5" />
+                        {signupLoading ? "Creating account..." : "Create Account"}
+                        {!signupLoading && <ArrowRight className="h-5 w-5" />}
                       </button>
                     </form>
 
