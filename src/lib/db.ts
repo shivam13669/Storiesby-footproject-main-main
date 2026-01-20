@@ -62,7 +62,7 @@ export async function initDB(): Promise<Database> {
       } else if (typeof sqlModule === 'function') {
         initSqlJs = sqlModule;
       } else {
-        console.error('sql.js module structure:', sqlModule);
+        console.error('Failed to find initSqlJs function. Module keys:', Object.keys(sqlModule));
         throw new Error('Could not find initSqlJs function in sql.js module');
       }
 
