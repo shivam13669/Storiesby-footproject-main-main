@@ -52,8 +52,10 @@ export async function initDB(): Promise<Database> {
   try {
     // Initialize SQL.js with dynamic import
     if (!SQL) {
-      const sqlModule = await import('sql.js');
-      const initSqlJs = sqlModule.default || sqlModule;
+      const { default: initSqlJs } = await import('sql.js');
+      if (typeof initSqlJs !== 'function') {
+        throw new Error('initSqlJs is not a function');
+      }
       SQL = await initSqlJs();
     }
 
