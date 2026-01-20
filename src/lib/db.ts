@@ -50,46 +50,24 @@ export async function initDB(): Promise<Database> {
   if (dbInstance) return dbInstance;
 
   try {
-    // Initialize SQL.js with proper WASM file location handling
+    // Initialize SQL.js
     if (!SQL) {
-      try {
-        // Try dynamic import first
-        const sqlModule = await import('sql.js');
-        const initSqlJs = sqlModule.default;
+      // Use dynamic import with proper error handling
+      const sqlModule = await import('sql.js');
 
-        if (typeof initSqlJs === 'function') {
-          SQL = await initSqlJs({
-            locateFile: (filename: string) => {
-              return `https://sql.js.org/dist/${filename}`;
-            }
-          });
-        } else {
-          throw new Error('initSqlJs is not a function from dynamic import');
-        }
-      } catch (dynamicImportError) {
-        // Fallback: load sql.js from CDN
-        const script = document.createElement('script');
-        script.src = 'https://sql.js.org/dist/sql-wasm.js';
-        script.async = true;
+      // The module might export as default or be the function directly
+      const initSqlJs = (sqlModule as any).default || (sqlModule as any);
 
-        SQL = await new Promise((resolve, reject) => {
-          script.onload = () => {
-            // @ts-ignore - sql.js is loaded globally
-            if (typeof window.initSqlJs === 'function') {
-              // @ts-ignore
-              window.initSqlJs({
-                locateFile: (filename: string) => {
-                  return `https://sql.js.org/dist/${filename}`;
-                }
-              }).then(resolve).catch(reject);
-            } else {
-              reject(new Error('sql.js CDN failed to load'));
-            }
-          };
-          script.onerror = () => reject(new Error('Failed to load sql.js from CDN'));
-          document.head.appendChild(script);
-        });
+      // Ensure initSqlJs is actually a function before calling it
+      if (typeof initSqlJs !== 'function') {
+        console.error('sql.js module contents:', sqlModule);
+        throw new Error('initSqlJs import did not return a function. Module structure may have changed.');
       }
+
+      // Initialize with WASM file location
+      SQL = await initSqlJs({
+        locateFile: (file: string) => `https://sql.js.org/dist/${file}`,
+      });
     }
 
     // Try to load existing database from localStorage
